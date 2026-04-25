@@ -5,10 +5,16 @@ const { Server } = require("socket.io");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 const PORT = process.env.PORT || 3000;
-const PUBLIC_URL = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "https://bunker-s4n4.onrender.com";
+const PUBLIC_URL = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || "https://newbunker.onrender.com";
 const PROJECT_ROOT = __dirname;
+const DEFAULT_SLOT_COUNT = 6;
 const STATIC_FILES = {
   "/script.js": "script.js",
   "/style.css": "style.css",
@@ -41,49 +47,90 @@ app.use((req, res) => {
 });
 
 io.on("connection", (socket) => {
-  socket.on("create-room", ({ name } = {}, reply) => {
+  socket.on("createRoom", ({ name } = {}, reply) => {
     const roomCode = createRoomCode();
-    const playerName = cleanName(name) || "Ведущий";
-    const room = createRoom(roomCode, socket.id, playerName);
+    const userName = cleanName(name) || "Ведущий";
+    const room = createRoom(roomCode, socket.id, userName);
     rooms.set(roomCode, room);
     socket.join(roomCode);
     sendReply(reply, { ok: true, roomCode });
+    logRoomState(roomCode);
     broadcastRoom(roomCode);
   });
 
-  socket.on("join-room", ({ roomCode, name } = {}, reply) => {
+  socket.on("joinRoom", ({ roomCode, name } = {}, reply) => {
     const normalizedCode = normalizeRoomCode(roomCode);
     const room = rooms.get(normalizedCode);
 
     if (!room) {
+      sendError(socket, "Комната не найдена");
       sendReply(reply, { ok: false, error: "Комната не найдена" });
       return;
     }
 
-    const existingPlayer = room.players.find((player) => player.socketId === socket.id);
-    if (existingPlayer) {
-      existingPlayer.name = cleanName(name) || existingPlayer.name;
-      socket.join(normalizedCode);
-      sendReply(reply, { ok: true, roomCode: normalizedCode });
-      broadcastRoom(normalizedCode);
-      return;
-    }
-
-    room.players.push({
-      socketId: socket.id,
-      name: cleanName(name) || `Игрок ${room.players.length + 1}`,
-      playerNumber: assignPlayerNumber(room),
-      isHost: false,
-      connected: true
-    });
-    room.gameLog.push(`${room.players[room.players.length - 1].name} присоединился к комнате`);
+    const user = ensureRoomUser(room, socket.id, cleanName(name) || `Игрок ${room.users.length + 1}`);
+    user.name = cleanName(name) || user.name;
+    user.connected = true;
     socket.join(normalizedCode);
+    room.gameLog.push(`${user.name} присоединился к комнате`);
     sendReply(reply, { ok: true, roomCode: normalizedCode });
+    logRoomState(normalizedCode);
     broadcastRoom(normalizedCode);
   });
 
-  socket.on("host-generate-pack", ({ roomCode, pack } = {}) => {
+  socket.on("claimSlot", ({ roomCode, slotIndex, playerName } = {}, reply) => {
+    const normalizedCode = normalizeRoomCode(roomCode);
+    const room = rooms.get(normalizedCode);
+    const slotKey = normalizeSlotIndex(slotIndex);
+
+    if (!room) {
+      sendError(socket, "Комната не найдена");
+      sendReply(reply, { ok: false, error: "Комната не найдена" });
+      return;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(room.slots, slotKey)) {
+      sendError(socket, "Такого слота нет");
+      sendReply(reply, { ok: false, error: "Такого слота нет" });
+      return;
+    }
+
+    if (room.slots[slotKey] && room.slots[slotKey] !== socket.id) {
+      sendError(socket, "Слот уже занят");
+      sendReply(reply, { ok: false, error: "Слот уже занят" });
+      return;
+    }
+
+    const user = ensureRoomUser(room, socket.id, cleanName(playerName) || "Игрок");
+    user.name = cleanName(playerName) || user.name;
+    releaseUserSlot(room, socket.id);
+    room.slots[slotKey] = socket.id;
+    room.slotNames[slotKey] = user.name;
+    room.gameLog.push(`${user.name} занял слот ${slotKey}`);
+    sendReply(reply, { ok: true });
+    logRoomState(normalizedCode);
+    broadcastRoom(normalizedCode);
+  });
+
+  socket.on("leaveSlot", ({ roomCode } = {}, reply) => {
+    const normalizedCode = normalizeRoomCode(roomCode);
+    const room = rooms.get(normalizedCode);
+
+    if (!room) {
+      sendError(socket, "Комната не найдена");
+      sendReply(reply, { ok: false, error: "Комната не найдена" });
+      return;
+    }
+
+    releaseUserSlot(room, socket.id);
+    sendReply(reply, { ok: true });
+    logRoomState(normalizedCode);
+    broadcastRoom(normalizedCode);
+  });
+
+  socket.on("generatePack", ({ roomCode, pack } = {}) => {
     const room = getHostRoom(socket, roomCode);
+
     if (!room || !pack) {
       return;
     }
@@ -95,24 +142,26 @@ io.on("connection", (socket) => {
     room.protectedPlayers = [];
     room.pendingAbilityRequests = [];
     room.gameLog = ["Ведущий сгенерировал новый пак"];
-    reconcilePlayerSlots(room);
+    ensureRoomSlots(room, DEFAULT_SLOT_COUNT);
+    logRoomState(room.roomCode);
     broadcastRoom(room.roomCode);
   });
 
-  socket.on("reveal-trait", ({ roomCode, playerNumber, traitKey } = {}) => {
+  socket.on("revealTrait", ({ roomCode, playerNumber, traitKey } = {}) => {
     const room = rooms.get(normalizeRoomCode(roomCode));
-    const player = getRoomPlayer(room, socket.id);
+    const user = getRoomUser(room, socket.id);
 
-    if (!room || !player || !canReveal(player, Number(playerNumber))) {
+    if (!room || !user || !canReveal(room, user, Number(playerNumber))) {
       return;
     }
 
     setTraitRevealed(room, Number(playerNumber), traitKey);
     room.gameLog.push(`Открыта характеристика Игрока ${Number(playerNumber)}`);
+    logRoomState(room.roomCode);
     broadcastRoom(room.roomCode);
   });
 
-  socket.on("reveal-all", ({ roomCode, playerNumber, traitKeys } = {}) => {
+  socket.on("revealAll", ({ roomCode, playerNumber, traitKeys } = {}) => {
     const room = getHostRoom(socket, roomCode);
     if (!room) {
       return;
@@ -122,10 +171,11 @@ io.on("connection", (socket) => {
       setTraitRevealed(room, Number(playerNumber), traitKey);
     });
     room.gameLog.push(`Ведущий открыл все характеристики Игрока ${Number(playerNumber)}`);
+    logRoomState(room.roomCode);
     broadcastRoom(room.roomCode);
   });
 
-  socket.on("exclude-player", ({ roomCode, playerNumber, excluded } = {}) => {
+  socket.on("excludePlayer", ({ roomCode, playerNumber, excluded } = {}) => {
     const room = getHostRoom(socket, roomCode);
     if (!room) {
       return;
@@ -141,24 +191,28 @@ io.on("connection", (socket) => {
       room.gameLog.push(`Ведущий вернул Игрока ${number}`);
     }
     room.excludedPlayers = Array.from(excludedSet);
+    logRoomState(room.roomCode);
     broadcastRoom(room.roomCode);
   });
 
-  socket.on("host-sync-state", ({ roomCode, state } = {}) => {
+  socket.on("hostSyncState", ({ roomCode, state } = {}) => {
     const room = getHostRoom(socket, roomCode);
     if (!room || !state) {
       return;
     }
 
     applySharedState(room, state);
+    logRoomState(room.roomCode);
     broadcastRoom(room.roomCode);
   });
 
-  socket.on("ability-request", ({ roomCode, context } = {}, reply) => {
+  socket.on("abilityRequest", ({ roomCode, context } = {}, reply) => {
     const room = rooms.get(normalizeRoomCode(roomCode));
-    const player = getRoomPlayer(room, socket.id);
+    const user = getRoomUser(room, socket.id);
+    const userSlot = getUserSlot(room, socket.id);
 
-    if (!room || !player || Number(context?.actorNumber) !== Number(player.playerNumber)) {
+    if (!room || !user || Number(context?.actorNumber) !== Number(userSlot)) {
+      sendError(socket, "Можно использовать только свои способности");
       sendReply(reply, { ok: false, error: "Можно использовать только свои способности" });
       return;
     }
@@ -166,19 +220,20 @@ io.on("connection", (socket) => {
     const request = {
       id: createRequestId(),
       socketId: socket.id,
-      playerName: player.name,
-      actorNumber: player.playerNumber,
+      playerName: user.name,
+      actorNumber: Number(userSlot),
       context,
       createdAt: Date.now()
     };
     room.pendingAbilityRequests.push(request);
-    room.gameLog.push(`Игрок ${player.playerNumber} запросил способность`);
+    room.gameLog.push(`Игрок ${userSlot} запросил способность`);
     sendReply(reply, { ok: true, requestId: request.id });
+    logRoomState(room.roomCode);
     broadcastRoom(room.roomCode);
-    io.to(room.hostId).emit("ability-approval-request", { roomCode: room.roomCode, request });
+    io.to(room.hostId).emit("abilityApprovalRequest", { roomCode: room.roomCode, request });
   });
 
-  socket.on("host-reject-ability", ({ roomCode, requestId } = {}) => {
+  socket.on("hostRejectAbility", ({ roomCode, requestId } = {}) => {
     const room = getHostRoom(socket, roomCode);
     if (!room) {
       return;
@@ -186,22 +241,21 @@ io.on("connection", (socket) => {
 
     room.pendingAbilityRequests = room.pendingAbilityRequests.filter((request) => request.id !== requestId);
     room.gameLog.push("Ведущий отклонил запрос способности");
+    logRoomState(room.roomCode);
     broadcastRoom(room.roomCode);
   });
 
   socket.on("disconnect", () => {
     rooms.forEach((room) => {
-      const player = room.players.find((candidate) => candidate.socketId === socket.id);
-      if (!player) {
+      const user = getRoomUser(room, socket.id);
+      if (!user) {
         return;
       }
 
-      player.connected = false;
-      if (room.hostId === socket.id) {
-        room.gameLog.push("Ведущий отключился");
-      } else {
-        room.gameLog.push(`${player.name} отключился`);
-      }
+      user.connected = false;
+      releaseUserSlot(room, socket.id);
+      room.gameLog.push(user.isHost ? "Ведущий отключился" : `${user.name} отключился`);
+      logRoomState(room.roomCode);
       broadcastRoom(room.roomCode);
     });
   });
@@ -211,7 +265,9 @@ function createRoom(roomCode, hostId, hostName) {
   return {
     roomCode,
     hostId,
-    players: [{ socketId: hostId, name: hostName, playerNumber: 1, isHost: true, connected: true }],
+    users: [{ socketId: hostId, name: hostName, isHost: true, connected: true }],
+    slots: createSlots(DEFAULT_SLOT_COUNT),
+    slotNames: {},
     generatedPack: null,
     revealedTraits: {},
     excludedPlayers: [],
@@ -220,6 +276,29 @@ function createRoom(roomCode, hostId, hostName) {
     pendingAbilityRequests: [],
     gameLog: ["Комната создана"]
   };
+}
+
+function createSlots(count) {
+  return Array.from({ length: count }, (_, index) => index + 1).reduce((slots, slotNumber) => {
+    slots[slotNumber] = null;
+    return slots;
+  }, {});
+}
+
+function ensureRoomSlots(room, count) {
+  const existingSlots = room.slots || {};
+  const nextSlots = createSlots(count);
+  const nextSlotNames = {};
+
+  Object.keys(nextSlots).forEach((slotKey) => {
+    if (existingSlots[slotKey]) {
+      nextSlots[slotKey] = existingSlots[slotKey];
+      nextSlotNames[slotKey] = room.slotNames?.[slotKey] || getRoomUser(room, existingSlots[slotKey])?.name || "";
+    }
+  });
+
+  room.slots = nextSlots;
+  room.slotNames = nextSlotNames;
 }
 
 function createRoomCode() {
@@ -241,6 +320,10 @@ function normalizeRoomCode(roomCode) {
   return String(roomCode || "").trim().toUpperCase();
 }
 
+function normalizeSlotIndex(slotIndex) {
+  return String(Number(slotIndex));
+}
+
 function cleanName(name) {
   return String(name || "").trim().slice(0, 32);
 }
@@ -255,12 +338,43 @@ function getHostRoom(socket, roomCode) {
   return room;
 }
 
-function getRoomPlayer(room, socketId) {
-  return room?.players?.find((player) => player.socketId === socketId) || null;
+function getRoomUser(room, socketId) {
+  return room?.users?.find((user) => user.socketId === socketId) || null;
 }
 
-function canReveal(player, playerNumber) {
-  return player.isHost || Number(player.playerNumber) === Number(playerNumber);
+function ensureRoomUser(room, socketId, name) {
+  const existingUser = getRoomUser(room, socketId);
+
+  if (existingUser) {
+    return existingUser;
+  }
+
+  const user = {
+    socketId,
+    name,
+    isHost: room.hostId === socketId,
+    connected: true
+  };
+  room.users.push(user);
+  return user;
+}
+
+function getUserSlot(room, socketId) {
+  const entry = Object.entries(room?.slots || {}).find(([, ownerId]) => ownerId === socketId);
+  return entry ? Number(entry[0]) : null;
+}
+
+function releaseUserSlot(room, socketId) {
+  Object.keys(room.slots || {}).forEach((slotKey) => {
+    if (room.slots[slotKey] === socketId) {
+      room.slots[slotKey] = null;
+      delete room.slotNames[slotKey];
+    }
+  });
+}
+
+function canReveal(room, user, playerNumber) {
+  return user.isHost || Number(getUserSlot(room, user.socketId)) === Number(playerNumber);
 }
 
 function setTraitRevealed(room, playerNumber, traitKey) {
@@ -273,49 +387,6 @@ function setTraitRevealed(room, playerNumber, traitKey) {
   }
 
   room.revealedTraits[playerNumber][traitKey] = true;
-}
-
-function assignPlayerNumber(room) {
-  const maxPlayers = room.generatedPack?.players?.length || 8;
-  const used = new Set(room.players.map((player) => Number(player.playerNumber)).filter(Boolean));
-
-  for (let number = 1; number <= maxPlayers; number += 1) {
-    if (!used.has(number)) {
-      return number;
-    }
-  }
-
-  return null;
-}
-
-function reconcilePlayerSlots(room) {
-  const maxPlayers = room.generatedPack?.players?.length || 8;
-  const used = new Set();
-
-  room.players.forEach((player) => {
-    const number = Number(player.playerNumber);
-    if (number >= 1 && number <= maxPlayers && !used.has(number)) {
-      player.playerNumber = number;
-      used.add(number);
-      return;
-    }
-
-    player.playerNumber = null;
-  });
-
-  room.players.forEach((player) => {
-    if (player.playerNumber) {
-      return;
-    }
-
-    for (let number = 1; number <= maxPlayers; number += 1) {
-      if (!used.has(number)) {
-        player.playerNumber = number;
-        used.add(number);
-        return;
-      }
-    }
-  });
 }
 
 function applySharedState(room, state) {
@@ -348,11 +419,34 @@ function applySharedState(room, state) {
   }
 }
 
+function getRoomPlayers(room) {
+  return room.users.map((user) => ({
+    socketId: user.socketId,
+    name: user.name,
+    playerNumber: getUserSlot(room, user.socketId),
+    isHost: user.isHost,
+    connected: user.connected
+  }));
+}
+
+function getCurrentUser(room, user) {
+  return {
+    socketId: user.socketId,
+    name: user.name,
+    playerNumber: getUserSlot(room, user.socketId),
+    isHost: user.isHost,
+    connected: user.connected
+  };
+}
+
 function serializeRoom(room) {
   return {
     roomCode: room.roomCode,
     hostId: room.hostId,
-    players: room.players,
+    users: room.users,
+    players: getRoomPlayers(room),
+    slots: room.slots,
+    slotNames: room.slotNames,
     generatedPack: room.generatedPack,
     revealedTraits: room.revealedTraits,
     excludedPlayers: room.excludedPlayers,
@@ -370,18 +464,29 @@ function broadcastRoom(roomCode) {
   }
 
   const payload = serializeRoom(room);
-  room.players.forEach((player) => {
-    io.to(player.socketId).emit("room-state", {
+  room.users.forEach((user) => {
+    io.to(user.socketId).emit("roomStateUpdated", {
       room: payload,
-      currentUser: player,
+      currentUser: getCurrentUser(room, user),
       publicUrl: PUBLIC_URL
     });
   });
 }
 
+function sendError(socket, message) {
+  socket.emit("errorMessage", message);
+}
+
 function sendReply(reply, payload) {
   if (typeof reply === "function") {
     reply(payload);
+  }
+}
+
+function logRoomState(roomCode) {
+  const room = rooms.get(roomCode);
+  if (room) {
+    console.log("Room state:", JSON.stringify(serializeRoom(room), null, 2));
   }
 }
 
