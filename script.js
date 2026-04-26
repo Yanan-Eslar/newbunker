@@ -1,6 +1,9 @@
 const cardColors = ["#9b5cff", "#32aaf3", "#3bd26f", "#ff8b25", "#ffc928", "#ff477d", "#4fd1c5", "#f97316"];
 const ROLE_HOST = "host";
 const ROLE_PLAYER = "player";
+const VIEW_CARDS = "cards";
+const VIEW_TABLE = "table";
+const CHARACTER_VIEW_STORAGE_KEY = "bunkerCharacterView";
 const PUBLIC_APP_URL = "https://bunker-s4n4.onrender.com";
 const characterTraits = [
   { key: "gender", label: "Пол" },
@@ -41,6 +44,8 @@ const generateButton = document.querySelector("#generateButton");
 const randomThemeButton = document.querySelector("#randomThemeButton");
 const statusMessage = document.querySelector("#statusMessage");
 const characterGrid = document.querySelector("#characterGrid");
+const cardViewButton = document.querySelector("#cardViewButton");
+const tableViewButton = document.querySelector("#tableViewButton");
 const gameLogList = document.querySelector("#gameLogList");
 const createRoomButton = document.querySelector("#createRoomButton");
 const joinRoomButton = document.querySelector("#joinRoomButton");
@@ -94,9 +99,18 @@ let socket = null;
 let currentRoomCode = "";
 let currentSocketId = "";
 let roomPlayers = [];
+let characterView = getSavedCharacterView();
 let pendingCreateRoomName = "";
 let pendingApprovedRequest = null;
 const handledAbilityRequests = new Set();
+
+function getSavedCharacterView() {
+  try {
+    return localStorage.getItem(CHARACTER_VIEW_STORAGE_KEY) === VIEW_CARDS ? VIEW_CARDS : VIEW_TABLE;
+  } catch (error) {
+    return VIEW_TABLE;
+  }
+}
 
 function getSelectedText(select) {
   return select.options[select.selectedIndex].textContent.trim();
@@ -744,6 +758,34 @@ function createPlaceholderImage(character) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
+function setCharacterView(view) {
+  if (![VIEW_CARDS, VIEW_TABLE].includes(view) || characterView === view) {
+    updateViewToggle();
+    return;
+  }
+
+  characterView = view;
+
+  try {
+    localStorage.setItem(CHARACTER_VIEW_STORAGE_KEY, characterView);
+  } catch (error) {
+    // Keep the selected view for this session when storage is blocked.
+  }
+
+  updateViewToggle();
+
+  if (currentPack?.players) {
+    renderCharacters(currentPack.players);
+  }
+}
+
+function updateViewToggle() {
+  cardViewButton?.classList.toggle("active", characterView === VIEW_CARDS);
+  tableViewButton?.classList.toggle("active", characterView === VIEW_TABLE);
+  cardViewButton?.setAttribute("aria-pressed", String(characterView === VIEW_CARDS));
+  tableViewButton?.setAttribute("aria-pressed", String(characterView === VIEW_TABLE));
+}
+
 function renderPack(pack) {
   currentPack = pack;
   if (!isOnlineRoom()) {
@@ -759,6 +801,15 @@ function renderPack(pack) {
 
 function renderCharacters(characters) {
   characterGrid.innerHTML = "";
+  characterGrid.classList.toggle("cards-view", characterView === VIEW_CARDS);
+  characterGrid.classList.toggle("table-view", characterView === VIEW_TABLE);
+  updateViewToggle();
+
+  if (characterView === VIEW_TABLE) {
+    renderPlayersTable(characters);
+    return;
+  }
+
   characterGrid.style.setProperty("--player-columns", Math.min(characters.length, 6));
   const gameIsOver = isGameOver();
 
@@ -791,6 +842,77 @@ function renderCharacters(characters) {
 
     characterGrid.append(card);
   });
+}
+
+function renderPlayersTable(characters) {
+  const gameIsOver = isGameOver();
+  const table = document.createElement("div");
+  table.className = "players-table-wrap";
+  table.innerHTML = `
+    <table class="players-table">
+      <colgroup>
+        <col class="players-table-number-col">
+        <col class="players-table-player-col">
+        ${characterTraits.map((trait) => `<col class="players-table-trait-col players-table-${trait.key}-col">`).join("")}
+      </colgroup>
+      <thead>
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col">Игрок</th>
+          ${characterTraits.map((trait) => `<th scope="col">${trait.label}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${characters.map((character) => renderPlayerTableRow(character, gameIsOver)).join("")}
+      </tbody>
+    </table>
+  `;
+
+  characterGrid.append(table);
+}
+
+function renderPlayerTableRow(character, gameIsOver) {
+  const isExcluded = excludedPlayers.has(character.number);
+  const isOwn = isOwnPlayer(character.number);
+
+  return `
+    <tr class="${isExcluded ? "excluded" : ""}${isOwn ? " own-row" : ""}" style="--accent: ${character.accent}">
+      <th class="players-table-number" scope="row">${character.number}</th>
+      <td class="players-table-player">${renderPlayerTableSlot(character, isExcluded, gameIsOver)}</td>
+      ${characterTraits.map((trait) => `
+        <td class="players-table-cell trait-${trait.key}">
+          ${renderTraitValue(character, trait)}
+        </td>
+      `).join("")}
+    </tr>
+  `;
+}
+
+function renderPlayerTableSlot(character, isExcluded, gameIsOver) {
+  const slotPlayer = getRoomPlayerForSlot(character.number);
+  const isOwn = isOwnPlayer(character.number);
+  const playerName = slotPlayer?.name || (isOwn && currentPlayerName) || `Игрок ${character.number}`;
+  const statusClass = isOwn ? "own" : slotPlayer ? "occupied" : "free";
+  const statusText = isOwn ? "Мой слот" : slotPlayer ? "Занято" : "Занять слот";
+
+  return `
+    <div class="players-table-slot">
+      <div class="players-table-player-main">
+        <span class="players-table-player-name">${escapeHtml(playerName)}</span>
+        <span class="players-table-slot-status ${statusClass}">${statusText}</span>
+      </div>
+      ${isHostView() ? `
+        <div class="players-table-host-actions">
+          <button class="trait-mini-action" type="button" data-action="reveal-all" data-player="${character.number}" aria-label="Открыть все Игроку ${character.number}">◎</button>
+          <button class="trait-mini-action exclude-table-action${isExcluded ? " active" : ""}" type="button" data-action="exclude" data-player="${character.number}" aria-label="${isExcluded ? "Вернуть" : "Исключить"} Игрока ${character.number}" ${gameIsOver && !isExcluded ? "disabled" : ""}>${isExcluded ? "↩" : "×"}</button>
+        </div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function getRoomPlayerForSlot(playerNumber) {
+  return roomPlayers.find((player) => Number(player.playerNumber) === Number(playerNumber)) || null;
 }
 
 function getOwnCardBadgeText() {
@@ -2051,6 +2173,8 @@ abilityModal.addEventListener("click", (event) => {
 
 generateButton.addEventListener("click", generateLocalPack);
 randomThemeButton.addEventListener("click", selectRandomTheme);
+cardViewButton?.addEventListener("click", () => setCharacterView(VIEW_CARDS));
+tableViewButton?.addEventListener("click", () => setCharacterView(VIEW_TABLE));
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
     createRoomButton?.addEventListener("click", createOnlineRoom);
@@ -2083,6 +2207,7 @@ playerCountSelect.addEventListener("change", () => {
 
 setGenerationReady(false);
 updateRoleControls();
+updateViewToggle();
 
 if (window.location.protocol === "file:") {
   const message = `Открой сайт через сервер: ${PUBLIC_APP_URL}. Не открывай index.html напрямую.`;
