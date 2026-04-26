@@ -540,15 +540,23 @@ button:focus-visible {
 
 .character-grid {
   width: 100%;
+  max-width: min(1400px, var(--cards-grid-max, 1400px));
   min-width: 0;
+  margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  justify-content: center;
+  gap: 16px;
   align-items: start;
+}
+
+.character-grid.cards-view[data-player-count="6"] {
+  --cards-grid-max: 900px;
 }
 
 .character-grid.table-view {
   display: block;
+  max-width: 100%;
 }
 
 .players-table-wrap {
@@ -816,6 +824,8 @@ button:focus-visible {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent),
     0 22px 55px rgba(0, 0, 0, 0.36);
+  transform-origin: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .character-card::before {
@@ -831,6 +841,19 @@ button:focus-visible {
 .character-card.excluded {
   filter: grayscale(0.86);
   opacity: 0.46;
+}
+
+.character-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 46%, rgba(255, 255, 255, 0.18));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 58%, transparent),
+    0 0 24px color-mix(in srgb, var(--accent) 34%, transparent),
+    0 24px 60px rgba(0, 0, 0, 0.42);
+  transform: scale(1.02);
+}
+
+.character-card.excluded:hover {
+  transform: none;
 }
 
 .character-card.own-card {
@@ -882,7 +905,7 @@ button:focus-visible {
 .portrait {
   display: block;
   width: calc(100% - 20px);
-  height: 142px;
+  height: 126px;
   margin: 10px 10px 0;
   object-fit: cover;
   border-radius: 18px;
@@ -892,11 +915,11 @@ button:focus-visible {
 }
 
 .card-body {
-  padding: 18px 18px 20px;
+  padding: 14px 16px 16px;
 }
 
 .profession {
-  margin: 0 0 16px;
+  margin: 0 0 12px;
   color: color-mix(in srgb, var(--accent) 60%, #f5f5f7);
   font-size: 14px;
   font-weight: 760;
@@ -907,17 +930,17 @@ button:focus-visible {
 
 .stats {
   display: grid;
-  gap: 8px;
+  gap: 4px;
   margin: 0;
 }
 
 .stats > .trait-row {
   display: grid;
-  grid-template-columns: 90px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: 8px;
   align-items: start;
   min-width: 0;
-  padding: 8px 0;
+  padding: 6px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.055);
   color: rgba(245, 245, 247, 0.86);
   font-size: 13px;
@@ -929,8 +952,21 @@ button:focus-visible {
 }
 
 .stats dt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   color: color-mix(in srgb, var(--accent) 46%, var(--muted));
   font-weight: 720;
+}
+
+.trait-label-icon {
+  flex: 0 0 auto;
+  width: 17px;
+  color: rgba(245, 245, 247, 0.72);
+  font-size: 12px;
+  line-height: 1;
+  text-align: center;
 }
 
 .stats dd {
@@ -967,7 +1003,7 @@ button:focus-visible {
   justify-content: space-between;
   align-items: flex-start;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 6px;
   width: 100%;
   min-width: 0;
 }
@@ -983,11 +1019,85 @@ button:focus-visible {
   margin-left: auto;
 }
 
-.trait-hidden-placeholder {
-  flex: 1 1 120px;
+.hidden-player-controls .trait-value-line,
+.hidden-host-controls .trait-value-line {
+  justify-content: flex-end;
+}
+
+.hidden-player-controls .trait-row-actions,
+.hidden-host-controls .trait-row-actions {
+  margin-left: 0;
+}
+
+.trait-value-box.revealed-now {
+  animation: traitRevealIn 0.2s ease both;
+}
+
+.trait-signal {
+  --tone-color: rgba(245, 245, 247, 0.86);
+  --tone-glow: transparent;
+  display: inline-flex;
+  flex: 1 1 150px;
+  align-items: flex-start;
+  gap: 7px;
   min-width: 0;
-  color: var(--muted-2);
-  font-weight: 650;
+  color: var(--tone-color);
+  text-shadow: 0 0 12px var(--tone-glow);
+}
+
+.trait-signal > .trait-value,
+.trait-signal .ability-buttons {
+  flex: 1 1 auto;
+}
+
+.trait-signal .ability-use-button {
+  border-color: color-mix(in srgb, var(--tone-color) 24%, rgba(255, 255, 255, 0.1));
+  color: var(--tone-color);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 14px var(--tone-glow);
+}
+
+.trait-tone-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-top: 0.45em;
+  border-radius: 50%;
+  background: var(--tone-color);
+  box-shadow: 0 0 10px var(--tone-glow);
+}
+
+.trait-tone-good {
+  --tone-color: #8ee8a3;
+  --tone-glow: rgba(114, 209, 140, 0.38);
+}
+
+.trait-tone-bad {
+  --tone-color: #ff7f7f;
+  --tone-glow: rgba(239, 106, 106, 0.42);
+}
+
+.trait-tone-neutral {
+  --tone-color: rgba(180, 180, 188, 0.9);
+  --tone-glow: rgba(255, 255, 255, 0.08);
+}
+
+.trait-tone-rare {
+  --tone-color: #d9b86f;
+  --tone-glow: rgba(216, 191, 101, 0.5);
+}
+
+@keyframes traitRevealIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .trait-mini-action {
@@ -1037,6 +1147,16 @@ button:focus-visible {
 
 .visibility-badge.host {
   color: rgba(245, 245, 247, 0.58);
+}
+
+.visibility-badge.icon-only {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
 }
 
 .stats .trait-specialAbility dd {
@@ -1572,7 +1692,7 @@ button:focus-visible {
   }
 
   .character-grid {
-    grid-template-columns: repeat(auto-fit, minmax(238px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
   }
 }
 

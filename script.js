@@ -20,6 +20,53 @@ const characterTraits = [
   { key: "specialAbility", label: "Способн." }
 ];
 
+const traitIcons = {
+  gender: "👤",
+  bodyType: "▣",
+  trait: "✦",
+  age: "⏳",
+  profession: "🛠",
+  health: "❤️",
+  hobby: "🎯",
+  phobia: "😱",
+  largeInventory: "📦",
+  backpack: "🎒",
+  additionalInfo: "ℹ",
+  specialAbility: "⚡"
+};
+
+const traitToneKeywords = {
+  good: [
+    "врач",
+    "инженер",
+    "механик",
+    "фермер",
+    "электрик",
+    "первая помощь",
+    "выживание",
+    "сильный иммунитет",
+    "идеальное здоровье",
+    "абсолютно здоров"
+  ],
+  bad: [
+    "рак",
+    "психоз",
+    "шизофрения",
+    "наркомания",
+    "инсульт",
+    "инфаркт",
+    "алкоголизм",
+    "хрупкие кости",
+    "тяжелые болезни"
+  ],
+  rare: [
+    "тайный агент",
+    "знает другой бункер",
+    "выживал в катастрофе",
+    "уникальные способности"
+  ]
+};
+
 const cardSections = {
   gender: "Пол",
   bodyType: "Тип тела",
@@ -89,6 +136,7 @@ let cardDatabase = createEmptyCardDatabase();
 let currentPack = null;
 let excludedPlayers = new Set();
 let revealedTraits = {};
+let newlyRevealedTraitKeys = new Set();
 let confirmAction = null;
 let usedAbilities = {};
 let protectedPlayers = new Set();
@@ -351,6 +399,7 @@ function applyRoomState({ room, currentUser }) {
     return;
   }
 
+  markNewlyRevealedTraits(room.revealedTraits || {});
   currentRoomCode = room.roomCode;
   currentSocketId = socket?.id || currentUser.socketId || currentSocketId;
   roomPlayers = room.players || [];
@@ -818,6 +867,7 @@ function renderCharacters(characters) {
   characterGrid.innerHTML = "";
   characterGrid.classList.toggle("cards-view", characterView === VIEW_CARDS);
   characterGrid.classList.toggle("table-view", characterView === VIEW_TABLE);
+  characterGrid.dataset.playerCount = String(characters.length);
   updateViewToggle();
 
   if (characterView === VIEW_TABLE) {
@@ -857,6 +907,12 @@ function renderCharacters(characters) {
 
     characterGrid.append(card);
   });
+
+  if (newlyRevealedTraitKeys.size > 0) {
+    window.setTimeout(() => {
+      newlyRevealedTraitKeys.clear();
+    }, 240);
+  }
 }
 
 function renderPlayersTable(characters) {
@@ -944,10 +1000,11 @@ function renderCardTitle(character) {
 
 function renderTraitRow(character, trait) {
   const value = renderTraitValue(character, trait);
+  const icon = traitIcons[trait.key] || "•";
 
   return `
     <div class="trait-row trait-${trait.key}">
-      <dt>${trait.label}</dt>
+      <dt><span class="trait-label-icon" aria-hidden="true">${icon}</span><span>${trait.label}</span></dt>
       <dd>${value}</dd>
     </div>
   `;
@@ -977,7 +1034,6 @@ function renderHiddenTraitValue(playerNumber, trait) {
   return `
     <div class="trait-value-box hidden-player-controls">
       <div class="trait-value-line">
-        <span class="trait-hidden-placeholder">Скрыто</span>
         <span class="trait-row-actions">${lockAction}</span>
       </div>
     </div>
@@ -992,23 +1048,25 @@ function renderHostHiddenTraitControls(playerNumber, trait) {
   return `
     <div class="trait-value-box hidden-host-controls">
       <div class="trait-value-line">
-        <span class="trait-hidden-placeholder">Скрыто</span>
         <span class="trait-row-actions">${revealAction}${rerollAction}${healthAction}</span>
       </div>
-      <span class="visibility-badge host">Скрыто</span>
     </div>
   `;
 }
 
 function renderVisibleTraitValue(character, trait, isPublic) {
   let value;
+  const tone = getTraitTone(character, trait);
+  const revealClass = newlyRevealedTraitKeys.has(getTraitRevealKey(character.number, trait.key))
+    ? " revealed-now"
+    : "";
 
   if (trait.key === "health") {
-    value = renderHealthValue(character);
+    value = renderHealthValue(character, tone);
   } else if (trait.key === "specialAbility") {
-    value = renderSpecialAbilities(character);
+    value = renderTraitSignal(renderSpecialAbilities(character), tone);
   } else {
-    value = `<span class="trait-value">${escapeHtml(character[trait.key])}</span>`;
+    value = renderTraitSignal(`<span class="trait-value">${escapeHtml(character[trait.key])}</span>`, tone);
   }
 
   const revealAction = !isPublic && canRevealTrait(character.number)
@@ -1022,7 +1080,7 @@ function renderVisibleTraitValue(character, trait, isPublic) {
     : "";
 
   return `
-    <div class="trait-value-box">
+    <div class="trait-value-box${revealClass}">
       <div class="trait-value-line">
         ${value}
         <span class="trait-row-actions">${revealAction}${rerollAction}${healthAction}</span>
@@ -1042,10 +1100,58 @@ function renderVisibilityBadge(playerNumber, isPublic) {
   }
 
   if (isHostView()) {
-    return `<span class="visibility-badge host">Скрыто от игроков</span>`;
+    return `<span class="visibility-badge host icon-only" aria-label="Скрыто от игроков" title="Скрыто от игроков">🔒</span>`;
   }
 
   return "";
+}
+
+function renderTraitSignal(content, tone) {
+  return `
+    <span class="trait-signal trait-tone-${tone}">
+      <span class="trait-tone-dot" aria-hidden="true"></span>
+      ${content}
+    </span>
+  `;
+}
+
+function getTraitTone(character, trait) {
+  const value = cleanText(character?.[trait.key], "");
+  const normalizedValue = normalizeTraitText(value);
+
+  if (!normalizedValue) {
+    return "neutral";
+  }
+
+  if (trait.key === "hobby" || trait.key === "phobia" || trait.key === "bodyType" || trait.key === "gender" || trait.key === "age") {
+    return "neutral";
+  }
+
+  if (matchesToneKeywords(normalizedValue, traitToneKeywords.rare)) {
+    return "rare";
+  }
+
+  if (matchesToneKeywords(normalizedValue, traitToneKeywords.bad)) {
+    return "bad";
+  }
+
+  if (matchesToneKeywords(normalizedValue, traitToneKeywords.good)) {
+    return "good";
+  }
+
+  if (trait.key === "health") {
+    return character.healthSeverity === "good" ? "good" : character.healthSeverity === "critical" || character.healthSeverity === "danger" ? "bad" : "neutral";
+  }
+
+  return "neutral";
+}
+
+function matchesToneKeywords(value, keywords) {
+  return keywords.some((keyword) => value.includes(normalizeTraitText(keyword)));
+}
+
+function normalizeTraitText(value) {
+  return cleanText(value, "").toLowerCase().replaceAll("ё", "е");
 }
 
 function renderSpecialAbilities(character) {
@@ -1056,9 +1162,9 @@ function renderSpecialAbilities(character) {
   }
 
   return `
-    <div class="ability-buttons">
+    <span class="ability-buttons">
       ${abilities.map((ability, index) => renderAbilityCard(character.number, ability, index)).join("")}
-    </div>
+    </span>
   `;
 }
 
@@ -1166,16 +1272,16 @@ function getAbilityTraitGenitiveLabel(traitKey) {
   return labels[traitKey] || "карты";
 }
 
-function renderHealthValue(character) {
+function renderHealthValue(character, tone = "neutral") {
   const severity = ["good", "medium", "danger", "critical"].includes(character.healthSeverity)
     ? character.healthSeverity
     : "medium";
   const explanation = character.healthExplanation || "Состояние влияет на ресурс организма и шансы выжить.";
 
   return `
-    <span class="health-value health-${severity}">
+    <span class="health-value health-${severity} trait-signal trait-tone-${tone}">
       <span class="health-text">
-        <span class="health-marker" aria-hidden="true"></span>
+        <span class="trait-tone-dot health-marker" aria-hidden="true"></span>
         <span class="trait-value">${escapeHtml(character.health)}</span>
       </span>
       <button class="health-help" type="button" data-action="health-info" aria-label="Пояснение здоровья">
@@ -1415,6 +1521,20 @@ function isTraitRevealed(playerNumber, traitKey) {
   return Boolean(revealedTraits[playerNumber]?.[traitKey]);
 }
 
+function getTraitRevealKey(playerNumber, traitKey) {
+  return `${playerNumber}:${traitKey}`;
+}
+
+function markNewlyRevealedTraits(nextRevealedTraits) {
+  Object.entries(nextRevealedTraits).forEach(([playerNumber, traits]) => {
+    Object.keys(traits || {}).forEach((traitKey) => {
+      if (traits[traitKey] && !revealedTraits[playerNumber]?.[traitKey]) {
+        newlyRevealedTraitKeys.add(getTraitRevealKey(playerNumber, traitKey));
+      }
+    });
+  });
+}
+
 function revealTrait(playerNumber, traitKey) {
   if (isOnlineRoom()) {
     socket.emit("reveal-trait", { roomCode: currentRoomCode, playerNumber, traitKey });
@@ -1442,6 +1562,10 @@ function revealAllTraits(playerNumber) {
 function setTraitRevealed(playerNumber, traitKey) {
   if (!revealedTraits[playerNumber]) {
     revealedTraits[playerNumber] = {};
+  }
+
+  if (!revealedTraits[playerNumber][traitKey]) {
+    newlyRevealedTraitKeys.add(getTraitRevealKey(playerNumber, traitKey));
   }
 
   revealedTraits[playerNumber][traitKey] = true;
