@@ -94,6 +94,7 @@ let socket = null;
 let currentRoomCode = "";
 let currentSocketId = "";
 let roomPlayers = [];
+let pendingCreateRoomName = "";
 let pendingApprovedRequest = null;
 const handledAbilityRequests = new Set();
 
@@ -215,6 +216,14 @@ function initializeSocket() {
 
   socket.on("connect", () => {
     currentSocketId = socket.id;
+    console.log("Connected:", socket.id);
+
+    if (pendingCreateRoomName) {
+      const playerName = pendingCreateRoomName;
+      pendingCreateRoomName = "";
+      emitCreateRoom(playerName);
+    }
+
     const inviteCode = new URLSearchParams(window.location.search).get("room");
 
     if (inviteCode && roomCodeInput && !currentRoomCode) {
@@ -224,6 +233,24 @@ function initializeSocket() {
   });
 
   socket.on("room-state", applyRoomState);
+  socket.on("roomCreated", ({ roomCode } = {}) => {
+    if (!roomCode) {
+      return;
+    }
+
+    console.log("Room created:", roomCode);
+    currentRoomCode = roomCode;
+
+    if (roomCodeInput) {
+      roomCodeInput.value = roomCode;
+    }
+
+    window.history.replaceState(
+      {},
+      "",
+      `?room=${roomCode}`
+    );
+  });
   socket.on("ability-approval-request", handleAbilityApprovalRequest);
   socket.on("disconnect", () => {
     setStatus("Соединение с комнатой потеряно. Переподключение...", "error");
@@ -231,12 +258,33 @@ function initializeSocket() {
 }
 
 function createOnlineRoom() {
-  if (!socket?.connected) {
-    setStatus("Нет соединения с сервером комнат.", "error");
+  const playerName = roomNameInput?.value.trim() || "";
+
+  if (!playerName) {
+    alert("Введите имя");
     return;
   }
 
-  socket.emit("create-room", { name: getRoomPlayerName() }, handleRoomReply);
+  console.log("Creating room as:", playerName);
+
+  if (!socket?.connected) {
+    pendingCreateRoomName = playerName;
+    setStatus("Нет соединения с сервером комнат. Комната создастся после подключения.", "error");
+    socket?.connect?.();
+    return;
+  }
+
+  emitCreateRoom(playerName);
+}
+
+function emitCreateRoom(playerName) {
+  if (!socket?.connected) {
+    pendingCreateRoomName = playerName;
+    return;
+  }
+
+  console.log("Emit createRoom");
+  socket.emit("createRoom", { playerName }, handleRoomReply);
 }
 
 function joinOnlineRoom() {
@@ -2003,7 +2051,13 @@ abilityModal.addEventListener("click", (event) => {
 
 generateButton.addEventListener("click", generateLocalPack);
 randomThemeButton.addEventListener("click", selectRandomTheme);
-createRoomButton?.addEventListener("click", createOnlineRoom);
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", () => {
+    createRoomButton?.addEventListener("click", createOnlineRoom);
+  }, { once: true });
+} else {
+  createRoomButton?.addEventListener("click", createOnlineRoom);
+}
 joinRoomButton?.addEventListener("click", joinOnlineRoom);
 roomCodeInput?.addEventListener("input", () => {
   roomCodeInput.value = roomCodeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
