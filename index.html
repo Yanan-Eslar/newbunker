@@ -14,18 +14,28 @@
         <p>Выбери тему, настрой параметры и получи уникальный пак карточек</p>
       </div>
 
+      <nav class="top-action-bar" aria-label="Действия игры">
+        <button class="top-action-button" id="settingsPanelButton" type="button" aria-haspopup="dialog">
+          <span aria-hidden="true">⚙</span>
+          <span>Настройки игры</span>
+        </button>
+        <button class="top-action-button" id="roomPanelButton" type="button" aria-haspopup="dialog">
+          <span aria-hidden="true">👥</span>
+          <span>Комната</span>
+        </button>
+        <button class="top-action-button" id="rolePanelButton" type="button" aria-haspopup="dialog">
+          <span aria-hidden="true">👤</span>
+          <span>Роль</span>
+        </button>
+        <button class="top-action-button" id="helpButton" type="button" aria-label="Помощь" aria-haspopup="dialog" aria-expanded="false">
+          <span aria-hidden="true">?</span>
+          <span>Помощь</span>
+        </button>
+      </nav>
     </header>
 
-    <nav class="top-action-bar" aria-label="Действия игры">
-      <button class="top-action-button primary" id="newGameButton" type="button">Новая игра</button>
-      <button class="top-action-button" id="settingsPanelButton" type="button" aria-haspopup="dialog">Настройки игры</button>
-      <button class="top-action-button" id="roomPanelButton" type="button" aria-haspopup="dialog">Комната</button>
-      <button class="top-action-button" id="rolePanelButton" type="button" aria-haspopup="dialog">Роль</button>
-      <button class="top-action-button help-action" id="helpButton" type="button" aria-label="Помощь" aria-haspopup="dialog" aria-expanded="false">?</button>
-    </nav>
-
-    <div class="status-message" id="statusMessage" role="status" aria-live="polite"></div>
     <div class="pack-summary" id="packSummary" aria-live="polite" hidden></div>
+    <div class="status-message" id="statusMessage" role="status" aria-live="polite"></div>
 
     <main class="content">
       <section class="pack-heading">

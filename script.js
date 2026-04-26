@@ -96,7 +96,6 @@ const cardViewButton = document.querySelector("#cardViewButton");
 const tableViewButton = document.querySelector("#tableViewButton");
 const gameLogList = document.querySelector("#gameLogList");
 const helpButton = document.querySelector("#helpButton");
-const newGameButton = document.querySelector("#newGameButton");
 const settingsPanelButton = document.querySelector("#settingsPanelButton");
 const roomPanelButton = document.querySelector("#roomPanelButton");
 const rolePanelButton = document.querySelector("#rolePanelButton");
@@ -2368,8 +2367,6 @@ document.addEventListener("click", (event) => {
   }
 });
 
-helpButton?.addEventListener("pointerenter", openHelpPanel);
-helpButton?.addEventListener("focus", openHelpPanel);
 helpButton?.addEventListener("click", (event) => {
   event.stopPropagation();
   openHelpPanel();
@@ -2381,7 +2378,6 @@ helpModal?.addEventListener("click", (event) => {
   }
 });
 
-newGameButton?.addEventListener("click", handleGeneratePackAction);
 settingsPanelButton?.addEventListener("click", () => openSetupModal("gameSettingsModal"));
 roomPanelButton?.addEventListener("click", () => openSetupModal("roomSetupModal"));
 rolePanelButton?.addEventListener("click", () => openSetupModal("roleSetupModal"));

@@ -1,7 +1,7 @@
 :root {
   color-scheme: dark;
   --bg: #050506;
-  --surface: rgba(15, 15, 18, 0.78);
+  --surface: rgba(10, 12, 15, 0.72);
   --surface-strong: rgba(32, 32, 35, 0.82);
   --surface-soft: rgba(255, 255, 255, 0.055);
   --border: rgba(255, 255, 255, 0.12);
@@ -15,7 +15,7 @@
   --yellow: #d8bf65;
   --pink: #d66a72;
   --red: #ef6a6a;
-  --shadow: 0 22px 54px rgba(0, 0, 0, 0.42);
+  --shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
   --shadow-soft: 0 12px 28px rgba(0, 0, 0, 0.32);
 }
 
@@ -29,6 +29,7 @@ html {
 
 body {
   position: relative;
+  isolation: isolate;
   margin: 0;
   overflow-x: hidden;
   min-height: 100vh;
@@ -47,7 +48,7 @@ body::before {
   content: "";
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   pointer-events: none;
   background: rgba(0, 0, 0, 0.72);
   backdrop-filter: blur(1.5px);
@@ -70,7 +71,6 @@ button:disabled {
 
 .page {
   position: relative;
-  z-index: 1;
   width: min(calc(100% - 32px), 1480px);
   max-width: 1480px;
   margin-left: auto;
@@ -81,14 +81,14 @@ button:disabled {
 .top-header {
   display: flex;
   justify-content: space-between;
-  gap: 28px;
-  align-items: flex-start;
-  margin-bottom: 28px;
+  gap: 20px;
+  align-items: center;
+  margin-bottom: 18px;
 }
 
 .title-block h1 {
-  margin: 0 0 12px;
-  font-size: 44px;
+  margin: 0 0 8px;
+  font-size: 28px;
   line-height: 1.04;
   font-weight: 760;
   letter-spacing: 0;
@@ -98,7 +98,7 @@ button:disabled {
   max-width: 620px;
   margin: 0;
   color: var(--muted);
-  font-size: 16px;
+  font-size: 13px;
   line-height: 1.45;
   font-weight: 500;
 }
@@ -126,49 +126,40 @@ button:disabled {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 14px;
-  padding: 8px;
-  border: 1px solid var(--border-soft);
-  border-radius: 16px;
-  background: var(--surface);
-  box-shadow: var(--shadow-soft);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  justify-content: flex-end;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
 }
 
 .top-action-button {
-  min-height: 36px;
-  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
   border: 1px solid var(--border-soft);
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(10, 12, 15, 0.58);
   color: rgba(245, 245, 247, 0.86);
-  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.26);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 12px;
   font-weight: 740;
   letter-spacing: 0;
   transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
 
 .top-action-button:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.095);
+  box-shadow:
+    0 0 18px rgba(255, 255, 255, 0.08),
+    0 10px 26px rgba(0, 0, 0, 0.32);
   color: var(--text);
   transform: translateY(-1px);
-}
-
-.top-action-button.primary {
-  border-color: rgba(255, 255, 255, 0.34);
-  background: rgba(245, 245, 247, 0.9);
-  color: var(--button-text);
-}
-
-.top-action-button.help-action {
-  width: 36px;
-  padding: 0;
-  margin-left: auto;
-  border-radius: 50%;
-  font-size: 15px;
 }
 
 .room-panel,
@@ -458,11 +449,13 @@ button:focus-visible {
 
 .content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
   gap: 18px;
   min-width: 0;
 }
 
 .pack-heading {
+  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -580,8 +573,8 @@ button:focus-visible {
 
 .game-log-panel {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: 1fr;
+  gap: 12px;
   align-items: start;
   padding: 18px 20px;
   border-radius: 16px;
@@ -618,6 +611,7 @@ button:focus-visible {
 }
 
 .characters-section {
+  grid-column: 1 / -1;
   width: 100%;
   min-width: 0;
   margin-top: 8px;
@@ -629,10 +623,11 @@ button:focus-visible {
   min-width: 0;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
+  grid-template-columns: repeat(8, minmax(120px, 1fr));
   justify-content: center;
   gap: 12px;
   align-items: start;
+  animation: viewFadeIn 0.18s ease both;
 }
 
 .character-grid.table-view {
@@ -721,6 +716,12 @@ button:focus-visible {
 
 .players-table tbody tr:nth-child(even) {
   background: rgba(255, 255, 255, 0.035);
+}
+
+.players-table tbody tr:hover {
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 54%),
+    rgba(255, 255, 255, 0.07);
 }
 
 .players-table tbody tr.own-row {
@@ -897,14 +898,15 @@ button:focus-visible {
   position: relative;
   min-width: 0;
   overflow: visible;
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: color-mix(in srgb, var(--accent) 38%, rgba(255, 255, 255, 0.12));
   border-radius: 16px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.065), rgba(255, 255, 255, 0.025)),
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, rgba(255, 255, 255, 0.045)), rgba(255, 255, 255, 0.02)),
     var(--surface);
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent) 34%, transparent),
-    0 22px 55px rgba(0, 0, 0, 0.36);
+    0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent),
+    0 0 18px color-mix(in srgb, var(--accent) 20%, transparent),
+    0 18px 44px rgba(0, 0, 0, 0.38);
   transform-origin: center;
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
@@ -985,24 +987,24 @@ button:focus-visible {
 
 .portrait {
   display: block;
-  width: calc(100% - 20px);
-  height: 126px;
-  margin: 10px 10px 0;
+  width: calc(100% - 16px);
+  height: 96px;
+  margin: 8px 8px 0;
   object-fit: cover;
-  border-radius: 18px;
+  border-radius: 12px;
   background: #171719;
   filter: saturate(0.68) brightness(0.86);
   opacity: 0.96;
 }
 
 .card-body {
-  padding: 14px 16px 16px;
+  padding: 11px 12px 12px;
 }
 
 .profession {
-  margin: 0 0 12px;
+  margin: 0 0 9px;
   color: color-mix(in srgb, var(--accent) 60%, #f5f5f7);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 760;
   line-height: 1.3;
   text-align: left;
@@ -1011,20 +1013,20 @@ button:focus-visible {
 
 .stats {
   display: grid;
-  gap: 4px;
+  gap: 2px;
   margin: 0;
 }
 
 .stats > .trait-row {
   display: grid;
-  grid-template-columns: 84px minmax(0, 1fr);
-  gap: 8px;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
   align-items: start;
   min-width: 0;
-  padding: 6px 0;
+  padding: 5px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.055);
   color: rgba(245, 245, 247, 0.86);
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1.35;
 }
 
@@ -1048,6 +1050,18 @@ button:focus-visible {
   font-size: 12px;
   line-height: 1;
   text-align: center;
+}
+
+@keyframes viewFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .stats dd {
@@ -1543,8 +1557,8 @@ button:focus-visible {
   inset: 0;
   z-index: 26;
   display: grid;
-  place-items: start center;
-  padding: 72px 16px 24px;
+  place-items: center;
+  padding: 24px 16px;
   overflow-y: auto;
   background: rgba(0, 0, 0, 0.56);
   backdrop-filter: blur(14px);
@@ -1693,12 +1707,12 @@ button:focus-visible {
   inset: 0;
   z-index: 28;
   display: grid;
-  place-items: start center;
-  padding: 86px 16px 24px;
-  background: rgba(0, 0, 0, 0.38);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  animation: helpFade 0.16s ease both;
+  place-items: center;
+  padding: 24px 16px;
+  background: rgba(0, 0, 0, 0.56);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  animation: modalBackdropIn 0.18s ease both;
 }
 
 .help-backdrop[hidden] {
@@ -1916,7 +1930,7 @@ button:focus-visible {
   }
 
   .character-grid {
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   }
 }
 
@@ -1996,6 +2010,7 @@ button:focus-visible {
   .room-panel,
   .room-info,
   .role-panel,
+  .content,
   .room-actions,
   .room-join,
   .role-actions,
@@ -2017,6 +2032,6 @@ button:focus-visible {
   }
 
   .stats > .trait-row {
-    grid-template-columns: 84px minmax(0, 1fr);
+    grid-template-columns: 1fr auto;
   }
 }
