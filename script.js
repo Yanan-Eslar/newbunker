@@ -761,11 +761,14 @@ function createRandomizedBunker(template, availableSlots) {
 
 function createLocalPlayer(index, abilityCards, drawState) {
   const health = drawCard(cardSections.health, drawState);
+  const race = drawCard("Раса", drawState);
+  const age = getAgeByRace(race);
 
   return {
     number: index + 1,
+    race,
     gender: drawCard(cardSections.gender, drawState),
-    age: generateAge(),
+    age: age,
     bodyType: drawCard(cardSections.bodyType, drawState),
     trait: drawCard(cardSections.trait, drawState),
     profession: drawCard(cardSections.profession, drawState),
@@ -2321,6 +2324,44 @@ function calculateSurvival(players, user) {
   else result = "Высокие шансы на выживание";
 
   return { score, result };
+}
+
+// Возвращает случайное целое между min и max включительно
+function getRandomInt(min, max) {
+  const lo = Math.ceil(Number(min) || 0);
+  const hi = Math.floor(Number(max) || 0);
+  if (hi <= lo) return lo;
+  return Math.floor(Math.random() * (hi - lo + 1)) + lo;
+}
+
+// ===== ГЕНЕРАЦИЯ ВОЗРАСТА ПО РАСЕ =====
+function getAgeByRace(race) {
+  const r = String(race || "").trim();
+  const ranges = {
+    "Высший эльф": [100, 700],
+    "Эльф": [100, 600],
+    "Лесной эльф": [80, 550],
+    "Тёмный эльф (дроу)": [80, 500],
+    "Гном": [40, 450],
+    "Дворф": [40, 350],
+    "Орк": [15, 140],
+    "Нимфа": [20, 400],
+    "Сатир": [20, 400],
+    "Аасимар": [18, 120],
+    "Кобольд": [10, 90],
+    "Тролль": [15, 90],
+    "Тифлинг": [16, 80],
+    "Драконорожденный": [15, 75],
+    "Ламия": [15, 70],
+    "Гарпия": [15, 70],
+    "Гоблин": [8, 50],
+    "Фея": [10, 100],
+    "Младший Демон": [10, 1000],
+    "Суккуб/Инкуб": [100, 10000]
+  };
+
+  const pair = ranges[r] || [18, 60];
+  return getRandomInt(pair[0], pair[1]);
 }
 
 function getTraitInstrumental(traitKey) {
